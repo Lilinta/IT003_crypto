@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""
+Giải challenge Script Kiddie của CryptoHack.
+
+Ý tưởng:
+1) Nhận ra script dùng XOR (^) thay vì phép lũy thừa/modular exponentiation.
+2) Vì g = 2, ta suy ra b = B ^ 2.
+3) Shared secret = A ^ b.
+4) Dẫn xuất AES key bằng SHA1(str(shared_secret))[:16].
+5) Giải mã AES-CBC và bỏ padding PKCS#7.
+"""
+
+from hashlib import sha1
+
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+
+def pkcs7_unpad(data: bytes) -> bytes:
+    """Bỏ padding PKCS#7."""
+    if not data:
+        raise ValueError("Dữ liệu rỗng")
+    pad_len = data[-1]
+    if pad_len < 1 or pad_len > 16:
+        raise ValueError("Padding không hợp lệ")
+    if data[-pad_len:] != bytes([pad_len]) * pad_len:
+        raise ValueError("Padding không hợp lệ")
+    return data[:-pad_len]
+
+
+def derive_aes_key(shared_secret: int) -> bytes:
+    """
+    Dẫn xuất AES-128 key từ shared_secret:
+    key = SHA1(str(shared_secret).encode('ascii'))[:16]
+    """
+    return sha1(str(shared_secret).encode("ascii")).digest()[:16]
+
+
+def decrypt_flag(shared_secret: int, iv_hex: str, ciphertext_hex: str) -> str:
+    """
+    Giải mã AES-CBC và trả về plaintext.
+    """
+    key = derive_aes_key(shared_secret)
+
+    iv = bytes.fromhex(iv_hex)
+    ciphertext = bytes.fromhex(ciphertext_hex)
+
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    plaintext_padded = decryptor.update(ciphertext) + decryptor.finalize()
+
+    plaintext = pkcs7_unpad(plaintext_padded)
+    return plaintext.decode("ascii")
+
+
+def main():
+    # Dữ liệu từ output.txt
+    p = 2410312426921032588552076022197566074856950548502459942654116941958108831682612228890093858261341614673227141477904012196503648957050582631942730706805009223062734745341073406696246014589361659774041027169249453200378729434170325843778659198143763193776859869524088940195577346119843545301547043747207749969763750084308926339295559968882457872412993810129130294592999947926365264059284647209730384947211681434464714438488520940127459844288859336526896320919633919
+    g = 2
+    A = 539556019868756019035615487062583764545019803793635712947528463889304486869497162061335997527971977050049337464152478479265992127749780103259420400564906895897077512359628760656227084039215210033374611483959802841868892445902197049235745933150328311259162433075155095844532813412268773066318780724878693701177217733659861396010057464019948199892231790191103752209797118863201066964703008895947360077614198735382678809731252084194135812256359294228383696551949882
+    B = 652888676809466256406904653886313023288609075262748718135045355786028783611182379919130347165201199876762400523413029908630805888567578414109983228590188758171259420566830374793540891937904402387134765200478072915215871011267065310188328883039327167068295517693269989835771255162641401501080811953709743259493453369152994501213224841052509818015422338794357540968552645357127943400146625902468838113443484208599332251406190345653880206706388377388164982846343351
+
+    iv = "c044059ae57b61821a9090fbdefc63c5"
+    encrypted_flag = "f60522a95bde87a9ff00dc2c3d99177019f625f3364188c1058183004506bf96541cf241dad1c0e92535564e537322d7"
+
+    # Do script dùng XOR, b được suy ra trực tiếp từ B
+    # B = g ^ b  =>  b = B ^ g
+    b = B ^ g
+
+    # Shared secret cũng chỉ là XOR
+    shared_secret = A ^ b
+
+    flag = decrypt_flag(shared_secret, iv, encrypted_flag)
+    print(flag)
+
+
+if __name__ == "__main__":
+    main()
